@@ -12,7 +12,7 @@ if (!$reversioner->isReversionerInstalled()) {
 		$reversioner->installReversioner();
 		header('Location: ./'); exit;
 	}
-	die("<h1>Reversioner is not installed.</h1> <a href='?install_reversioner'>Install</a> (Only adds schema_version table in your database).");
+	die("<div style='font: 16px Arial; padding: 20px;'><h1>Reversioner is not installed.</h1> <a href='?install_reversioner'>Install</a> (Only adds schema_version table to your database).</div>");
 }
 
 
