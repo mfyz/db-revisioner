@@ -1,7 +1,8 @@
 <?php
 
-class Reversioner {
+class Revisioner {
 	public $db;
+	public $all_versions = NULL;
 
 	function __construct($db) {
 		$this->db = $db;
@@ -35,12 +36,12 @@ class Reversioner {
 		}
 	}
 
-	function isReversionerInstalled(){
+	function isRevisionerInstalled(){
 		$response = $this->run("SHOW TABLES LIKE 'schema_version'", TRUE);
 		return ($response->rowCount() > 0);
 	}
 
-	function installReversioner(){
+	function installRevisioner(){
 		$this->run("CREATE TABLE `schema_version` (`version` int(10) DEFAULT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 		INSERT INTO `schema_version` (`version`) VALUES ('0');");
 	}
@@ -51,31 +52,46 @@ class Reversioner {
 	}
 
 	function getAllVersions () {
-		$versions_folder_path = __DIR__ . '/versions';
-
-		$folder = dir($versions_folder_path);
-		$_versions = array();
-		while ($version_folder = $folder->read()) {
-			if ($version_folder !== '.' AND $version_folder !== '..' AND is_dir($versions_folder_path . '/' . $version_folder)) {
-				$_versions[] = $version_folder;
+		if (!$this->all_versions) {
+			$folder = dir(CONFIG_VERSIONS_DIR);
+			$_versions = array();
+			while ($version_folder = $folder->read()) {
+				if ($version_folder !== '.' AND $version_folder !== '..' AND is_dir(CONFIG_VERSIONS_DIR . '/' . $version_folder)) {
+					$version_folder_name = explode('-', $version_folder);
+					$version_id = trim($version_folder_name[0]);
+					$_versions[$version_id] = $version_folder;
+				}
 			}
+
+			ksort($_versions);
+
+			return $_versions;
 		}
 
-		return $_versions;
+		return $this->all_versions;
 	}
 
 	function getLatestVersion () {
-		return max($this->getAllVersions());
+		return max(array_keys($this->getAllVersions()));
 	}
 
 	function updateDbSchemaVersionTo($version){
 		return $this->run('UPDATE `schema_version` SET version = ' . $version);
 	}
 
-	function runVersion($version_id){
-		$version_folder_path = __DIR__ . '/versions/' . $version_id;
+	function getVersionFiles($version_id, $isFolderName = FALSE){
+		if ($isFolderName) {
+			$version_folder_path = CONFIG_VERSIONS_DIR . '/' . $version_id;
+		}
+		else {
+			$_all_versions = $this->getAllVersions();
+			if (!$_all_versions[$version_id]) throw new Exception("Version id is not found!");
+			$version_folder_path = CONFIG_VERSIONS_DIR . '/' . $_all_versions[$version_id];
+		}
 
-		if (!file_exists($version_folder_path) OR !is_dir($version_folder_path)) throw new Exception("Version folder not found (or is not folder)!");
+		if (!file_exists($version_folder_path) OR !is_dir($version_folder_path)) {
+			throw new Exception("Version folder not found (or is not folder)!");
+		}
 
 		$folder = dir($version_folder_path);
 		$_files = array();
@@ -85,18 +101,26 @@ class Reversioner {
 			}
 		}
 
-		$result = $this->run($_files, FALSE, TRUE);
+		return $_files;
+	}
 
+	function runVersion($version_id){
+		$_files = $this->getVersionFiles($version_id);
+		$result = $this->run($_files, FALSE, TRUE);
 		$this->updateDbSchemaVersionTo($version_id);
 	}
 
 	function updateAll() {
-		$current = $this->getCurrentVersion();
-		$latest  = $this->getLatestVersion();
+		$_versions = $this->getAllVersions();
+		$current   = $this->getCurrentVersion();
+		$latest    = $this->getLatestVersion();
+
 
 		for ($i = $current; $i <= $latest; $i++) {
-			if (file_exists(__DIR__ . '/versions/' . $i)) {
-				$this->runVersion($i);
+			if (isset($_versions[$i])) {
+				if (file_exists(CONFIG_VERSIONS_DIR . '/' . $_versions[$i])) {
+					$this->runVersion($i);
+				}
 			}
 		}
 
